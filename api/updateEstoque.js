@@ -9,7 +9,8 @@ module.exports = async (req, res) => {
   const { produto_id, action, password, categoria: customCategoria } = req.body;
 
   // Verifica a senha administrativa
-  if (password !== process.env.ADMIN_PASSWORD) {
+  const expectedPassword = process.env.ADMIN_PASSWORD || 'admin123';
+  if (!password || password.trim() !== expectedPassword.trim()) {
     return res.status(401).json({ erro: 'Senha incorreta!' });
   }
 

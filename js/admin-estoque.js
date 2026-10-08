@@ -57,14 +57,41 @@ let monthlyData = createCleanMonthlyData();
 /* ================================================================
    1. INICIALIZAÇÃO & AUTENTICAÇÃO
 ================================================================ */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   displayCurrentDate();
 
   const pwdInput = document.getElementById('adminPassword');
+  const errorMsg = document.getElementById('loginError');
   if (pwdInput) {
     pwdInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') login();
     });
+    pwdInput.addEventListener('input', () => {
+      if (errorMsg) errorMsg.style.display = 'none';
+    });
+  }
+
+  // Verifica se há uma sessão salva ativa na aba
+  const savedPwd = sessionStorage.getItem('admin_session_pwd');
+  if (savedPwd) {
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: savedPwd })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.sucesso) {
+        sessionPassword = savedPwd;
+        document.getElementById('loginOverlay').style.display = 'none';
+        document.getElementById('adminContent').style.display = 'flex';
+        await initAdmin();
+      } else {
+        sessionStorage.removeItem('admin_session_pwd');
+      }
+    } catch (e) {
+      sessionStorage.removeItem('admin_session_pwd');
+    }
   }
 });
 
@@ -79,6 +106,7 @@ function displayCurrentDate() {
 async function login() {
   const pwdInput = document.getElementById('adminPassword');
   const errorMsg = document.getElementById('loginError');
+  const btnLogin = document.querySelector('.btn-login');
   if (!pwdInput) return;
 
   const pwd = pwdInput.value.trim();
@@ -87,23 +115,64 @@ async function login() {
     return;
   }
 
-  sessionPassword = pwd;
-  
-  // Exibe o painel principal
-  document.getElementById('loginOverlay').style.display = 'none';
-  document.getElementById('adminContent').style.display = 'flex';
+  // Estado de carregamento no botão
+  if (btnLogin) {
+    btnLogin.disabled = true;
+    btnLogin.textContent = 'Verificando...';
+  }
   if (errorMsg) errorMsg.style.display = 'none';
 
-  // Carrega produtos do banco e histórico real
-  await initAdmin();
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd })
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.sucesso) {
+      if (errorMsg) {
+        errorMsg.textContent = data.erro || 'Senha incorreta. Tente novamente.';
+        errorMsg.style.display = 'block';
+      }
+      pwdInput.value = '';
+      pwdInput.focus();
+      return;
+    }
+
+    // Autenticação bem-sucedida
+    sessionPassword = pwd;
+    sessionStorage.setItem('admin_session_pwd', pwd);
+
+    // Exibe o painel principal
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('adminContent').style.display = 'flex';
+    if (errorMsg) errorMsg.style.display = 'none';
+
+    // Carrega produtos do banco e histórico real
+    await initAdmin();
+  } catch (err) {
+    console.error('Erro ao autenticar:', err);
+    if (errorMsg) {
+      errorMsg.textContent = 'Erro ao verificar senha com o servidor. Tente novamente.';
+      errorMsg.style.display = 'block';
+    }
+  } finally {
+    if (btnLogin) {
+      btnLogin.disabled = false;
+      btnLogin.textContent = 'Entrar no Painel';
+    }
+  }
 }
 
 /**
- * Logout: Redireciona diretamente para a página de vendas oficial
+ * Logout: Limpa a sessão e redireciona para a loja
  */
 function logout() {
   sessionPassword = '';
-  window.location.href = 'https://ls-moda-fitness.vercel.app/';
+  sessionStorage.removeItem('admin_session_pwd');
+  window.location.href = 'index.html';
 }
 
 /* ================================================================
